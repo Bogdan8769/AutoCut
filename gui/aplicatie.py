@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from core.modele import Coala, Piesa, PiesaAmplasata
+from core.optimizator import OptimizatorDebitare
 
 class AplicatieAutoCut(tk.Tk):
     def __init__(self):
@@ -123,35 +124,22 @@ class AplicatieAutoCut(tk.Tk):
             latime_coala = float(self.camp_latime_coala.get())
             panza = float(self.camp_panza.get())
             tivire = float(self.camp_tivire.get())
-            coala = Coala(lungime_coala, latime_coala, grosime_panza = panza, margine_tivire = tivire)
+            coala = Coala(lungime_coala, latime_coala, grosime_panza=panza, margine_tivire=tivire)
         except ValueError:
             messagebox.showerror("Eroare", "Datele introduse pentru coală sunt invalide.")
             return
 
+        # Apel direct către motorul din core/optimizator.py
+        optimizator = OptimizatorDebitare(coala)
+        rezultat = optimizator.optimizeaza(self.lista_piese)
 
-        piese_amplasate: list[PiesaAmplasata] = []
-        curent_x = coala.margine_tivire
-        curent_y = coala.margine_tivire
-        inaltime_maxima_rand = 0.0
+        if rezultat.piese_neincapute:
+            messagebox.showwarning(
+                "Atenție",
+                f"{len(rezultat.piese_neincapute)} piese nu au încăput pe această coală! Este necesară o a doua coală."
+            )
 
-        for p in self.lista_piese:
-            for _ in range(int(p.cantitate)):
-                lungime_p = p.lungime
-                latime_p = p.latime
-
-                if curent_x + lungime_p > (coala.lungime - coala.margine_tivire):
-                    curent_x = coala.margine_tivire
-                    curent_y += inaltime_maxima_rand + coala.grosime_panza
-                    inaltime_maxima_rand = 0.0
-
-                if curent_y + latime_p <= (coala.latime - coala.margine_tivire):
-                    piese_amplasate.append(
-                        PiesaAmplasata(p.nume, curent_x, curent_y, lungime_p, latime_p)
-                    )
-                    curent_x += lungime_p + coala.grosime_panza
-                    inaltime_maxima_rand = max(inaltime_maxima_rand, latime_p)
-
-        self._deseneaza_schita(coala, piese_amplasate)
+        self._deseneaza_schita(coala, rezultat.piese_amplasate)
 
     def _deseneaza_schita(self, coala: Coala, piese_amplasate: list[PiesaAmplasata]):
         self.canvas_schita.delete("all")
