@@ -32,4 +32,4 @@ class PiesaAmplasata:
         y: float
         lungime: float
         latime: float
-        rotatia: bool = False
+        rotita: bool = False

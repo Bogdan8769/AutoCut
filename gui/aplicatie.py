@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from core.modele import Coala, Piesa, PiesaAmplasata
-from core.optimizator import OptimizatorDebitare
+from core.optimizator import OptimizatorDebitare, RezultatOptimizare, CoalaCalculata
 
 class AplicatieAutoCut(tk.Tk):
     def __init__(self):
@@ -11,6 +11,9 @@ class AplicatieAutoCut(tk.Tk):
         self.minsize(950,620)
 
         self.lista_piese: list[Piesa] = []
+        self.rezultat_curent: RezultatOptimizare | None = None
+        self.coala_activa_idx: int = 0
+        self.coala_setari: Coala | None = None
         self.construieste_interfata()
 
     def construieste_interfata(self):
@@ -88,8 +91,20 @@ class AplicatieAutoCut(tk.Tk):
         panou_dreapta = ttk.Frame(self, padding= "10")
         panou_dreapta.pack (side = tk.RIGHT, fill = tk.BOTH, expand= True)
 
-        self.eticheta_statistici = ttk.Label(panou_dreapta, text="Statistici: Introduceți datele și apăsați 'Calculează Debitare'", font=("Arial", 10, "bold"))
-        self.eticheta_statistici.pack(anchor= "w", pady = (0, 5,))
+        bara_sus = ttk.Frame(panou_dreapta)
+        bara_sus.pack(fill=tk.X, pady=(0, 5))
+
+        self.btn_prev = ttk.Button(bara_sus, text="◀ Înapoi", width=8, state=tk.DISABLED, command=self._coala_anterioara)
+        self.btn_prev.pack(side=tk.LEFT)
+
+        self.lbl_pagina = ttk.Label(bara_sus, text="Coala 0 / 0", font=("Arial", 10, "bold"), padding="5")
+        self.lbl_pagina.pack(side=tk.LEFT, padx=10)
+
+        self.btn_next = ttk.Button(bara_sus, text="Înainte ▶", width=8, state=tk.DISABLED, command=self._coala_urmatoare)
+        self.btn_next.pack(side=tk.LEFT)
+
+        self.eticheta_statistici = ttk.Label(bara_sus, text="Statistici: Introduceți datele și apăsați 'Calculează Debitare'", font=("Arial", 9))
+        self.eticheta_statistici.pack(side=tk.RIGHT, padx=5)
 
         self.canvas_schita = tk.Canvas(panou_dreapta, bg="#1e1e1e", highlightthickness=1, highlightbackground="#444")
         self.canvas_schita.pack(fill= tk.BOTH, expand= True)
@@ -124,22 +139,53 @@ class AplicatieAutoCut(tk.Tk):
             latime_coala = float(self.camp_latime_coala.get())
             panza = float(self.camp_panza.get())
             tivire = float(self.camp_tivire.get())
-            coala = Coala(lungime_coala, latime_coala, grosime_panza=panza, margine_tivire=tivire)
+            self.coala_setari = Coala(lungime_coala, latime_coala, grosime_panza=panza, margine_tivire=tivire)
         except ValueError:
             messagebox.showerror("Eroare", "Datele introduse pentru coală sunt invalide.")
             return
 
-        # Apel direct către motorul din core/optimizator.py
-        optimizator = OptimizatorDebitare(coala)
-        rezultat = optimizator.optimizeaza(self.lista_piese)
+        optimizator = OptimizatorDebitare(self.coala_setari)
+        self.rezultat_curent = optimizator.optimizeaza(self.lista_piese)
 
-        if rezultat.piese_neincapute:
+        if not self.rezultat_curent.coli:
+            messagebox.showerror("Eroare", "Piesele sunt prea mari pentru această coală!")
+            return
+
+        if self.rezultat_curent.piese_neincapute:
             messagebox.showwarning(
                 "Atenție",
-                f"{len(rezultat.piese_neincapute)} piese nu au încăput pe această coală! Este necesară o a doua coală."
+                f"{len(self.rezultat_curent.piese_neincapute)} piese depășesc dimensiunile colii!"
             )
 
-        self._deseneaza_schita(coala, rezultat.piese_amplasate)
+        self.coala_activa_idx = 0
+        self._actualizeaza_vizualizare()
+
+    def _coala_anterioara(self):
+        if self.rezultat_curent and self.coala_activa_idx > 0:
+            self.coala_activa_idx -= 1
+            self._actualizeaza_vizualizare()
+
+    def _coala_urmatoare(self):
+        if self.rezultat_curent and self.coala_activa_idx < len(self.rezultat_curent.coli) - 1:
+            self.coala_activa_idx += 1
+            self._actualizeaza_vizualizare()
+
+    def _actualizeaza_vizualizare(self):
+        if not self.rezultat_curent or not self.coala_setari:
+            return
+
+        total_coli = len(self.rezultat_curent.coli)
+        coala_curenta: CoalaCalculata = self.rezultat_curent.coli[self.coala_activa_idx]
+
+        self.lbl_pagina.config(text=f"Coala {self.coala_activa_idx + 1} din {total_coli}")
+        self.btn_prev.config(state=tk.NORMAL if self.coala_activa_idx > 0 else tk.DISABLED)
+        self.btn_next.config(state=tk.NORMAL if self.coala_activa_idx < total_coli - 1 else tk.DISABLED)
+
+        self.eticheta_statistici.config(
+            text=f"Total coli: {total_coli} | Deșeu coală: {coala_curenta.procent_deseu:.1f}% | Deșeu mediu: {self.rezultat_curent.procent_mediu_deseu:.1f}%"
+        )
+
+        self._deseneaza_schita(self.coala_setari, coala_curenta.piese_amplasate)
 
     def _deseneaza_schita(self, coala: Coala, piese_amplasate: list[PiesaAmplasata]):
         self.canvas_schita.delete("all")
@@ -188,8 +234,4 @@ class AplicatieAutoCut(tk.Tk):
                     fill= "white", font = ("Arial", 8, "bold")
                 )
             suprafata_utila += (p.lungime * p.latime)
-        suprafata_totala = coala.lungime * coala.latime
-        procent_deseu = max(0.0, ((suprafata_totala - suprafata_utila) / suprafata_totala) * 100)
-        self.eticheta_statistici.config(
-            text =f"Piese debitate: {len(piese_amplasate)} | Suprafață utilă: {suprafata_utila/1_000_000:.2f} m² | Deșeu: {procent_deseu:.1f}%"
-        )                
+        
