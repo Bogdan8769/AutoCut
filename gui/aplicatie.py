@@ -1,11 +1,9 @@
-import customtkinter as ctk
-from tkinter import ttk, messagebox
 import tkinter as tk
-from core.modele import Coala, Piesa, PiesaAmplasata
-from core.optimizator import OptimizatorDebitare, RezultatOptimizare, CoalaCalculata
-from tkinter import filedialog
-from PIL import Image, ImageDraw, ImageFont
-
+from tkinter import ttk, messagebox, filedialog
+import customtkinter as ctk
+from PIL import Image, ImageDraw
+from core.modele import Coala, Piesa
+from core.optimizator import OptimizatorDebitare
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -14,424 +12,380 @@ ctk.set_default_color_theme("blue")
 class AplicatieAutoCut(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("AutoCut Pro - Sistem Inteligent Debitare PAL")
-        self.geometry("1240x780")
-        self.minsize(1050, 680)
+        self.title("AutoCut - Debitare PAL & Cantuire")
+        self.geometry("1340x800")
 
-        self.lista_piese: list[Piesa] = []
-        self.rezultat_curent: RezultatOptimizare | None = None
-        self.coala_activa_idx: int = 0
-        self.coala_setari: Coala | None = None
+        self.lista_piese = []
+        self.rezultat = None
+        self.pagina_curenta = 0
+        self.coala_setari = None
 
-        self.construieste_interfata()
+        self.tipare_cant = {
+            "Fără": (0, 0),
+            "│": (1, 0),
+            "║": (2, 0),
+            "─": (0, 1),
+            "═": (0, 2),
+            "└": (1, 1),
+            "⊐": (1, 2),
+            "⊔": (2, 1), 
+            "□": (2, 2)  
+        }
+        self.profil_selectat = "Fără"
 
-    def construieste_interfata(self):
-        # 1. Panou Control Stânga (Scrollable pentru flexibilitate)
-        panou_stanga = ctk.CTkScrollableFrame(self, width=380, corner_radius=12)
-        panou_stanga.pack(side="left", fill="y", padx=15, pady=15)
+        self.creeaza_gui()
 
-        titlu_app = ctk.CTkLabel(
-            panou_stanga, text="AutoCut Pro", font=ctk.CTkFont(size=22, weight="bold")
-        )
-        titlu_app.pack(anchor="w", pady=(5, 15))
+    def creeaza_gui(self):
+        # --- Panou Stanga ---
+        panou_stanga = ctk.CTkFrame(self, width=420, corner_radius=10)
+        panou_stanga.pack(side="left", fill="y", padx=10, pady=10)
 
-        # --- Secțiunea 1: Parametri Coală ---
-        cadru_coala = ctk.CTkFrame(panou_stanga, corner_radius=10)
-        cadru_coala.pack(fill="x", pady=8, padx=5)
+        ctk.CTkLabel(panou_stanga, text="1. Parametri Coală (mm)", font=("Segoe UI", 13, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
 
-        ctk.CTkLabel(
-            cadru_coala, text="1. Parametri Coală Brută (mm)", font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(anchor="w", padx=10, pady=(10, 8))
+        f_coala = ctk.CTkFrame(panou_stanga, fg_color="transparent")
+        f_coala.pack(fill="x", padx=10, pady=2)
 
-        grid_coala = ctk.CTkFrame(cadru_coala, fg_color="transparent")
-        grid_coala.pack(fill="x", padx=10, pady=(0, 10))
+        ctk.CTkLabel(f_coala, text="Lungime:").grid(row=0, column=0, sticky="w", pady=2)
+        self.txt_L_coala = ctk.CTkEntry(f_coala, width=75)
+        self.txt_L_coala.insert(0, "2800")
+        self.txt_L_coala.grid(row=0, column=1, padx=5, pady=2)
 
-        ctk.CTkLabel(grid_coala, text="Lungime:").grid(row=0, column=0, sticky="w", pady=4)
-        self.camp_lungime_coala = ctk.CTkEntry(grid_coala, width=90)
-        self.camp_lungime_coala.insert(0, "2800")
-        self.camp_lungime_coala.grid(row=0, column=1, padx=5, pady=4)
+        ctk.CTkLabel(f_coala, text="Lățime:").grid(row=0, column=2, sticky="w", pady=2, padx=(10, 0))
+        self.txt_l_coala = ctk.CTkEntry(f_coala, width=75)
+        self.txt_l_coala.insert(0, "2070")
+        self.txt_l_coala.grid(row=0, column=3, padx=5, pady=2)
 
-        ctk.CTkLabel(grid_coala, text="Lățime:").grid(row=1, column=0, sticky="w", pady=4)
-        self.camp_latime_coala = ctk.CTkEntry(grid_coala, width=90)
-        self.camp_latime_coala.insert(0, "2070")
-        self.camp_latime_coala.grid(row=1, column=1, padx=5, pady=4)
+        ctk.CTkLabel(f_coala, text="Pânză:").grid(row=1, column=0, sticky="w", pady=2)
+        self.txt_panza = ctk.CTkEntry(f_coala, width=75)
+        self.txt_panza.insert(0, "4")
+        self.txt_panza.grid(row=1, column=1, padx=5, pady=2)
 
-        ctk.CTkLabel(grid_coala, text="Pânză (disc):").grid(row=2, column=0, sticky="w", pady=4)
-        self.camp_panza = ctk.CTkEntry(grid_coala, width=90)
-        self.camp_panza.insert(0, "4")
-        self.camp_panza.grid(row=2, column=1, padx=5, pady=4)
+        ctk.CTkLabel(f_coala, text="Tivire:").grid(row=1, column=2, sticky="w", pady=2, padx=(10, 0))
+        self.txt_tivire = ctk.CTkEntry(f_coala, width=75)
+        self.txt_tivire.insert(0, "10")
+        self.txt_tivire.grid(row=1, column=3, padx=5, pady=2)
 
-        ctk.CTkLabel(grid_coala, text="Tivire margine:").grid(row=3, column=0, sticky="w", pady=4)
-        self.camp_tivire = ctk.CTkEntry(grid_coala, width=90)
-        self.camp_tivire.insert(0, "10")
-        self.camp_tivire.grid(row=3, column=1, padx=5, pady=4)
+        # 2. Adaugare Piesa
+        ctk.CTkLabel(panou_stanga, text="2. Adăugare Piesă", font=("Segoe UI", 13, "bold")).pack(anchor="w", padx=10, pady=(10, 2))
 
-        # --- Secțiunea 2: Adăugare Piese ---
-        cadru_piese = ctk.CTkFrame(panou_stanga, corner_radius=10)
-        cadru_piese.pack(fill="x", pady=8, padx=5)
+        f_piesa = ctk.CTkFrame(panou_stanga, fg_color="transparent")
+        f_piesa.pack(fill="x", padx=10, pady=2)
 
-        ctk.CTkLabel(
-            cadru_piese, text="2. Adăugare Piesă Nouă", font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(anchor="w", padx=10, pady=(10, 8))
+        ctk.CTkLabel(f_piesa, text="Nume:").grid(row=0, column=0, sticky="w", pady=2)
+        self.txt_nume = ctk.CTkEntry(f_piesa, width=120)
+        self.txt_nume.insert(0, "Ușă")
+        self.txt_nume.grid(row=0, column=1, padx=5, pady=2)
 
-        grid_piese = ctk.CTkFrame(cadru_piese, fg_color="transparent")
-        grid_piese.pack(fill="x", padx=10, pady=(0, 10))
+        ctk.CTkLabel(f_piesa, text="Cantitate:").grid(row=0, column=2, sticky="w", pady=2, padx=(5, 0))
+        self.txt_cantitate = ctk.CTkEntry(f_piesa, width=65)
+        self.txt_cantitate.insert(0, "1")
+        self.txt_cantitate.grid(row=0, column=3, padx=5, pady=2)
 
-        ctk.CTkLabel(grid_piese, text="Denumire:").grid(row=0, column=0, sticky="w", pady=4)
-        self.camp_nume_piesa = ctk.CTkEntry(grid_piese, width=130)
-        self.camp_nume_piesa.insert(0, "Ușă dulap")
-        self.camp_nume_piesa.grid(row=0, column=1, padx=5, pady=4)
+        ctk.CTkLabel(f_piesa, text="Lungime:").grid(row=1, column=0, sticky="w", pady=2)
+        self.txt_L_piesa = ctk.CTkEntry(f_piesa, width=120)
+        self.txt_L_piesa.grid(row=1, column=1, padx=5, pady=2)
 
-        ctk.CTkLabel(grid_piese, text="Lungime:").grid(row=1, column=0, sticky="w", pady=4)
-        self.camp_lungime_piesa = ctk.CTkEntry(grid_piese, width=130, placeholder_text="ex: 700")
-        self.camp_lungime_piesa.grid(row=1, column=1, padx=5, pady=4)
+        ctk.CTkLabel(f_piesa, text="Lățime:").grid(row=1, column=2, sticky="w", pady=2, padx=(5, 0))
+        self.txt_l_piesa = ctk.CTkEntry(f_piesa, width=65)
+        self.txt_l_piesa.grid(row=1, column=3, padx=5, pady=2)
 
-        ctk.CTkLabel(grid_piese, text="Lățime:").grid(row=2, column=0, sticky="w", pady=4)
-        self.camp_latime_piesa = ctk.CTkEntry(grid_piese, width=130, placeholder_text="ex: 450")
-        self.camp_latime_piesa.grid(row=2, column=1, padx=5, pady=4)
+        # Zona Simboluri Cant
+        f_cant = ctk.CTkFrame(panou_stanga, corner_radius=6)
+        f_cant.pack(fill="x", padx=10, pady=6)
 
-        ctk.CTkLabel(grid_piese, text="Cantitate:").grid(row=3, column=0, sticky="w", pady=4)
-        self.camp_cantitate_piesa = ctk.CTkEntry(grid_piese, width=130)
-        self.camp_cantitate_piesa.insert(0, "2")
-        self.camp_cantitate_piesa.grid(row=3, column=1, padx=5, pady=4)
+        f_grosime = ctk.CTkFrame(f_cant, fg_color="transparent")
+        f_grosime.pack(fill="x", padx=8, pady=(4, 2))
+
+        ctk.CTkLabel(f_grosime, text="Grosime cant (mm):", font=("Segoe UI", 11, "bold")).pack(side="left")
+        self.combo_grosime_cant = ctk.CTkComboBox(f_grosime, values=["0.4", "0.8", "1", "2"], width=75)
+        self.combo_grosime_cant.set("2")
+        self.combo_grosime_cant.pack(side="left", padx=10)
+
+        ctk.CTkLabel(f_cant, text="Selectează laturile cantuite:", font=("Segoe UI", 10)).pack(anchor="w", padx=8, pady=(4, 2))
+
+        f_butoane_cant = ctk.CTkFrame(f_cant, fg_color="transparent")
+        f_butoane_cant.pack(fill="x", padx=6, pady=(0, 6))
+
+        self.butoane_profil = {}
+        profiluri = ["Fără", "│", "║", "─", "═", "└", "⊐", "⊔", "□"]
+
+        for idx, p in enumerate(profiluri):
+            r = idx // 5  # asezam cate 5 pe rand ca sa incapa frumos
+            c = idx % 5
+            culoare_bg = "#1f538d" if p == "Fără" else "#333333"
+            marime_font = 10 if p == "Fără" else 14
+
+            btn = ctk.CTkButton(
+                f_butoane_cant,
+                text=p,
+                width=38,
+                height=28,
+                font=("Segoe UI", marime_font, "bold"),
+                fg_color=culoare_bg,
+                command=lambda val=p: self._selecteaza_profil_cant(val)
+            )
+            btn.grid(row=r, column=c, padx=2, pady=2)
+            self.butoane_profil[p] = btn
 
         self.bifa_rotatie = ctk.BooleanVar(value=True)
-        self.check_rotatie = ctk.CTkCheckBox(
-            cadru_piese, text="Permite rotație (fibră)", variable=self.bifa_rotatie
-        )
-        self.check_rotatie.pack(anchor="w", padx=10, pady=(5, 10))
+        ctk.CTkCheckBox(panou_stanga, text="Permite rotire", variable=self.bifa_rotatie).pack(anchor="w", padx=15, pady=4)
 
-        btn_adauga = ctk.CTkButton(
-            cadru_piese, text="➕ Adaugă în Comandă", fg_color="#27ae60", hover_color="#219150", command=self._adauga_piesa
-        )
-        btn_adauga.pack(fill="x", padx=10, pady=(0, 10))
+        ctk.CTkButton(panou_stanga, text="Adaugă Piesă", fg_color="#27ae60", hover_color="#219150", command=self.adauga_piesa).pack(fill="x", padx=10, pady=5)
 
-        # --- Secțiunea 3: Tabel Piese ---
-        cadru_tabel = ctk.CTkFrame(panou_stanga, corner_radius=10)
-        cadru_tabel.pack(fill="both", expand=True, pady=8, padx=5)
-
-        ctk.CTkLabel(
-            cadru_tabel, text="3. Piese de Debitat", font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(anchor="w", padx=10, pady=(10, 5))
-
-        # Stil modern pentru Treeview nativ
+        # Stil Dark Mode pentru Tabel
         stil = ttk.Style()
         stil.theme_use("clam")
-        stil.configure(
-            "Treeview",
-            background="#2b2b2b",
-            foreground="white",
-            fieldbackground="#2b2b2b",
-            rowheight=26,
-            font=("Segoe UI", 9)
-        )
-        stil.configure("Treeview.Heading", background="#1f1f1f", foreground="#3a7ebf", font=("Segoe UI", 9, "bold"))
+        stil.configure("Treeview", background="#252525", foreground="#ffffff", fieldbackground="#252525", rowheight=24, borderwidth=0, font=("Segoe UI", 9))
+        stil.configure("Treeview.Heading", background="#333333", foreground="#38b6ff", relief="flat", font=("Segoe UI", 9, "bold"))
         stil.map("Treeview", background=[("selected", "#1f538d")])
 
-        self.tabel = ttk.Treeview(cadru_tabel, columns=("nume", "l", "w", "cant"), show="headings", height=6)
+        self.tabel = ttk.Treeview(panou_stanga, columns=("nume", "L", "l", "cant", "profil", "L_fin", "l_fin"), show="headings", height=6)
         self.tabel.heading("nume", text="Piesă")
-        self.tabel.heading("l", text="L (mm)")
-        self.tabel.heading("w", text="l (mm)")
+        self.tabel.heading("L", text="Lungime")
+        self.tabel.heading("l", text="Lățime")
         self.tabel.heading("cant", text="Buc")
-        self.tabel.column("nume", width=120)
-        self.tabel.column("l", width=60)
-        self.tabel.column("w", width=60)
-        self.tabel.column("cant", width=45)
-        self.tabel.pack(fill="both", expand=True, padx=8, pady=5)
+        self.tabel.heading("profil", text="Cant")
+        self.tabel.heading("L_fin", text="L Fin")
+        self.tabel.heading("l_fin", text="l Fin")
 
-        btn_sterge = ctk.CTkButton(
-            cadru_tabel, text="🗑️ Șterge Piesa Selectată", fg_color="#c0392b", hover_color="#962d22", height=28, command=self._sterge_piesa
-        )
-        btn_sterge.pack(fill="x", padx=8, pady=(0, 10))
+        self.tabel.column("nume", width=75)
+        self.tabel.column("L", width=55, anchor="center")
+        self.tabel.column("l", width=50, anchor="center")
+        self.tabel.column("cant", width=35, anchor="center")
+        self.tabel.column("profil", width=65, anchor="center")
+        self.tabel.column("L_fin", width=45, anchor="center")
+        self.tabel.column("l_fin", width=45, anchor="center")
+        self.tabel.pack(fill="x", padx=10, pady=5)
 
-        # Buton Principal de Calcul
-        btn_calculeaza = ctk.CTkButton(
-            panou_stanga, text="⚡ CALCULEAZĂ OPTIMIZARE", height=42, font=ctk.CTkFont(size=13, weight="bold"), command=self._ruleaza_optimizarea
-        )
-        btn_calculeaza.pack(fill="x", pady=15, padx=5)
+        ctk.CTkButton(panou_stanga, text="Șterge Piesă", fg_color="#c0392b", hover_color="#962d22", height=28, command=self.sterge_piesa).pack(fill="x", padx=10, pady=3)
+        ctk.CTkButton(panou_stanga, text="CALCULEAZĂ", height=38, font=("Segoe UI", 12, "bold"), command=self.calculeaza).pack(fill="x", padx=10, pady=(10, 8))
 
-        # --- Panoul din Dreapta: Schiță 2D și Navigare ---
-        panou_dreapta = ctk.CTkFrame(self, corner_radius=12)
-        panou_dreapta.pack(side="right", fill="both", expand=True, padx=(0, 15), pady=15)
+        # --- Panou Dreapta ---
+        panou_dreapta = ctk.CTkFrame(self, corner_radius=10)
+        panou_dreapta.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
-        bara_navigare = ctk.CTkFrame(panou_dreapta, fg_color="transparent")
-        bara_navigare.pack(fill="x", padx=15, pady=12)
+        nav = ctk.CTkFrame(panou_dreapta, fg_color="transparent")
+        nav.pack(fill="x", padx=10, pady=5)
 
-        self.btn_prev = ctk.CTkButton(
-            bara_navigare, text="◀ Înapoi", width=85, state="disabled", command=self._coala_anterioara
-        )
-        self.btn_prev.pack(side="left")
+        self.btn_inapoi = ctk.CTkButton(nav, text="◀ Înapoi", width=80, state="disabled", command=self.pagina_inapoi)
+        self.btn_inapoi.pack(side="left")
 
-        self.lbl_pagina = ctk.CTkLabel(
-            bara_navigare, text="Coala 0 / 0", font=ctk.CTkFont(size=14, weight="bold")
-        )
-        self.lbl_pagina.pack(side="left", padx=15)
+        self.lbl_pag = ctk.CTkLabel(nav, text="Coala 0/0", font=("Segoe UI", 12, "bold"))
+        self.lbl_pag.pack(side="left", padx=12)
 
-        self.btn_next = ctk.CTkButton(
-            bara_navigare, text="Înainte ▶", width=85, state="disabled", command=self._coala_urmatoare
-        )
-        self.btn_next.pack(side="left")
+        self.btn_inainte = ctk.CTkButton(nav, text="Înainte ▶", width=80, state="disabled", command=self.pagina_inainte)
+        self.btn_inainte.pack(side="left")
 
-        self.btn_export = ctk.CTkButton(
-            bara_navigare, 
-            text="📷 Exportă Schița (PNG)", 
-            width=140, 
-            fg_color="#e67e22", 
-            hover_color="#d35400", 
-            command=self._exporta_schita
-        )
-        self.btn_export.pack(side="left", padx=10)
+        self.btn_export = ctk.CTkButton(nav, text="📷 Export Schiță", width=110, fg_color="#d35400", hover_color="#b94600", command=self.exporta_schita)
+        self.btn_export.pack(side="left", padx=12)
 
-        self.eticheta_statistici = ctk.CTkLabel(
-            bara_navigare,
-            text="Adăugați piese și calculați debitarea",
-            font=ctk.CTkFont(size=12),
-            text_color="#a0a0a0"
-        )
-        self.eticheta_statistici.pack(side="right")
+        self.lbl_stat = ctk.CTkLabel(nav, text="", font=("Segoe UI", 11))
+        self.lbl_stat.pack(side="right")
 
-        # Canvas grafic
-        self.canvas_schita = tk.Canvas(panou_dreapta, bg="#181818", highlightthickness=0)
-        self.canvas_schita.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        self.canvas = tk.Canvas(panou_dreapta, bg="#181818", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True, padx=10, pady=10)
 
-    def _adauga_piesa(self):
+    def _selecteaza_profil_cant(self, profil):
+        self.profil_selectat = profil
+        for nume_b, btn in self.butoane_profil.items():
+            if nume_b == profil:
+                btn.configure(fg_color="#1f538d")
+            else:
+                btn.configure(fg_color="#333333")
+
+    def adauga_piesa(self):
         try:
-            nume = self.camp_nume_piesa.get().strip() or "Piesă"
-            lungime = float(self.camp_lungime_piesa.get())
-            latime = float(self.camp_latime_piesa.get())
-            cantitate = int(float(self.camp_cantitate_piesa.get()))
-            permite_rotatie = self.bifa_rotatie.get()
+            nume = self.txt_nume.get() or "Piesă"
+            L = float(self.txt_L_piesa.get())
+            l = float(self.txt_l_piesa.get())
+            cant = int(self.txt_cantitate.get())
 
-            if lungime <= 0 or latime <= 0 or cantitate <= 0:
-                raise ValueError
+            if L <= 0 or l <= 0 or cant <= 0:
+                return
 
-            piesa = Piesa(nume, lungime, latime, cantitate, permite_rotatie)
+            grosime_cant = float(self.combo_grosime_cant.get())
+            lat_L, lat_l = self.tipare_cant[self.profil_selectat]
+
+            piesa = Piesa(
+                nume, L, l, cant, self.bifa_rotatie.get(),
+                cant_lungime=grosime_cant,
+                cant_latime=grosime_cant,
+                laturi_cant_l=lat_L,
+                laturi_cant_w=lat_l
+            )
             self.lista_piese.append(piesa)
 
-            self.tabel.insert("", "end", values=(nume, int(lungime), int(latime), cantitate))
-            self.camp_lungime_piesa.delete(0, "end")
-            self.camp_latime_piesa.delete(0, "end")
+            text_cant_tabel = f"{self.profil_selectat} ({grosime_cant})" if self.profil_selectat != "Fără" else "-"
+
+            self.tabel.insert("", "end", values=(
+                nume,
+                int(piesa.lungime),
+                int(piesa.latime),
+                cant,
+                text_cant_tabel,
+                f"{piesa.lungime_finita:.1f}".rstrip('0').rstrip('.'),
+                f"{piesa.latime_finita:.1f}".rstrip('0').rstrip('.')
+            ))
+            self.txt_L_piesa.delete(0, "end")
+            self.txt_l_piesa.delete(0, "end")
         except ValueError:
-            messagebox.showerror("Eroare", "Dimensiunile și cantitatea trebuie să fie numere strict pozitive!")
+            messagebox.showerror("Eroare", "Date invalide!")
 
-    def _sterge_piesa(self):
-        selectie = self.tabel.selection()
-        if not selectie:
-            messagebox.showinfo("Informație", "Selectează un rând din tabel pentru a-l șterge.")
-            return
-
-        for item in selectie:
-            index = self.tabel.index(item)
-            del self.lista_piese[index]
+    def sterge_piesa(self):
+        sel = self.tabel.selection()
+        for item in sel:
+            idx = self.tabel.index(item)
+            del self.lista_piese[idx]
             self.tabel.delete(item)
 
-    def _ruleaza_optimizarea(self):
+    def calculeaza(self):
         if not self.lista_piese:
-            messagebox.showwarning("Atenție", "Adăugați cel puțin o piesă înainte de debitare!")
             return
 
         try:
-            lungime_coala = float(self.camp_lungime_coala.get())
-            latime_coala = float(self.camp_latime_coala.get())
-            panza = float(self.camp_panza.get())
-            tivire = float(self.camp_tivire.get())
-            self.coala_setari = Coala(lungime_coala, latime_coala, grosime_panza=panza, margine_tivire=tivire)
+            self.coala_setari = Coala(self.txt_L_coala.get(), self.txt_l_coala.get(), self.txt_panza.get(), self.txt_tivire.get())
         except ValueError:
-            messagebox.showerror("Eroare", "Datele introduse pentru coală sunt invalide.")
             return
 
-        optimizator = OptimizatorDebitare(self.coala_setari)
-        self.rezultat_curent = optimizator.optimizeaza(self.lista_piese)
+        opt = OptimizatorDebitare(self.coala_setari)
+        self.rezultat = opt.optimizeaza(self.lista_piese)
+        self.pagina_curenta = 0
+        self.afiseaza_coala()
 
-        if not self.rezultat_curent.coli:
-            messagebox.showerror("Eroare", "Piesele sunt prea mari chiar și pentru o coală goală!")
+    def pagina_inapoi(self):
+        if self.rezultat and self.pagina_curenta > 0:
+            self.pagina_curenta -= 1
+            self.afiseaza_coala()
+
+    def pagina_inainte(self):
+        if self.rezultat and self.pagina_curenta < len(self.rezultat.coli) - 1:
+            self.pagina_curenta += 1
+            self.afiseaza_coala()
+
+    def afiseaza_coala(self):
+        if not self.rezultat or not self.rezultat.coli:
             return
 
-        if self.rezultat_curent.piese_neincapute:
-            messagebox.showwarning(
-                "Atenție",
-                f"{len(self.rezultat_curent.piese_neincapute)} piese depășesc dimensiunile colii!"
-            )
+        total = len(self.rezultat.coli)
+        c = self.rezultat.coli[self.pagina_curenta]
 
-        self.coala_activa_idx = 0
-        self._actualizeaza_vizualizare()
+        self.lbl_pag.configure(text=f"Coala {self.pagina_curenta + 1}/{total}")
+        self.btn_inapoi.configure(state="normal" if self.pagina_curenta > 0 else "disabled")
+        self.btn_inainte.configure(state="normal" if self.pagina_curenta < total - 1 else "disabled")
+        self.lbl_stat.configure(text=f"Deșeu: {c.procent_deseu:.1f}% | Deșeu mediu: {self.rezultat.procent_mediu_deseu:.1f}%")
 
-    def _coala_anterioara(self):
-        if self.rezultat_curent and self.coala_activa_idx > 0:
-            self.coala_activa_idx -= 1
-            self._actualizeaza_vizualizare()
+        self.deseneaza(c.piese_amplasate)
 
-    def _coala_urmatoare(self):
-        if self.rezultat_curent and self.coala_activa_idx < len(self.rezultat_curent.coli) - 1:
-            self.coala_activa_idx += 1
-            self._actualizeaza_vizualizare()
+    def deseneaza(self, piese):
+        self.canvas.delete("all")
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
 
-    def _actualizeaza_vizualizare(self):
-        if not self.rezultat_curent or not self.coala_setari:
-            return
+        coala = self.coala_setari
+        scara = min((cw - 40) / coala.lungime, (ch - 40) / coala.latime)
+        ox = (cw - coala.lungime * scara) / 2
+        oy = (ch - coala.latime * scara) / 2
 
-        total_coli = len(self.rezultat_curent.coli)
-        coala_curenta: CoalaCalculata = self.rezultat_curent.coli[self.coala_activa_idx]
+        self.canvas.create_rectangle(ox, oy, ox + coala.lungime * scara, oy + coala.latime * scara, fill="#d9c3a3", outline="white", width=2)
 
-        self.lbl_pagina.configure(text=f"Coala {self.coala_activa_idx + 1} din {total_coli}")
-        self.btn_prev.configure(state="normal" if self.coala_activa_idx > 0 else "disabled")
-        self.btn_next.configure(state="normal" if self.coala_activa_idx < total_coli - 1 else "disabled")
-
-        self.eticheta_statistici.configure(
-            text=f"Total coli: {total_coli} | Deșeu coala {self.coala_activa_idx + 1}: {coala_curenta.procent_deseu:.1f}% | Deșeu global: {self.rezultat_curent.procent_mediu_deseu:.1f}%"
-        )
-
-        self._deseneaza_schita(self.coala_setari, coala_curenta.piese_amplasate)
-
-    def _deseneaza_schita(self, coala: Coala, piese_amplasate: list[PiesaAmplasata]):
-        self.canvas_schita.delete("all")
-        latime_ecran = self.canvas_schita.winfo_width()
-        inaltime_ecran = self.canvas_schita.winfo_height()
-
-        if latime_ecran <= 50 or inaltime_ecran <= 50:
-            return
-
-        margine_canvas = 40
-        spatiu_util_w = latime_ecran - 2 * margine_canvas
-        spatiu_util_h = inaltime_ecran - 2 * margine_canvas
-
-        scara = min(spatiu_util_w / coala.lungime, spatiu_util_h / coala.latime)
-
-        orig_x = (latime_ecran - (coala.lungime * scara)) / 2
-        orig_y = (inaltime_ecran - (coala.latime * scara)) / 2
-
-        # 1. Umbră elegantă sub coala de PAL
-        self.canvas_schita.create_rectangle(
-            orig_x + 6, orig_y + 6,
-            orig_x + (coala.lungime * scara) + 6,
-            orig_y + (coala.latime * scara) + 6,
-            fill="#101010", outline=""
-        )
-
-        # 2. Desenare Coală Brută (PAL bej deschis mat)
-        self.canvas_schita.create_rectangle(
-            orig_x, orig_y,
-            orig_x + (coala.lungime * scara),
-            orig_y + (coala.latime * scara),
-            fill="#d9c3a3", outline="#ffffff", width=2
-        )
-
-        # 3. Linie punctată tivire (margine de siguranță)
         if coala.margine_tivire > 0:
-            tx = coala.margine_tivire * scara
-            self.canvas_schita.create_rectangle(
-                orig_x + tx, orig_y + tx,
-                orig_x + (coala.lungime * scara) - tx,
-                orig_y + (coala.latime * scara) - tx,
-                outline="#8c7b66", dash=(4, 4), width=1
-            )
+            t = coala.margine_tivire * scara
+            self.canvas.create_rectangle(ox + t, oy + t, ox + coala.lungime * scara - t, oy + coala.latime * scara - t, outline="#8c7b66", dash=(4, 4))
 
-        # Paletă de culori profesionale pentru piese
-        culori = ["#2980b9", "#27ae60", "#8e44ad", "#d35400", "#16a085", "#2c3e50"]
+        culori = ["#2980b9", "#27ae60", "#8e44ad", "#d35400", "#16a085"]
 
-        # 4. Desenare Piese
-        for idx, p in enumerate(piese_amplasate):
-            px1 = orig_x + (p.x * scara)
-            py1 = orig_y + (p.y * scara)
-            px2 = px1 + (p.lungime * scara)
-            py2 = py1 + (p.latime * scara)
+        for p in piese:
+            x1 = ox + p.x * scara
+            y1 = oy + p.y * scara
+            x2 = x1 + p.lungime * scara
+            y2 = y1 + p.latime * scara
 
-            # Culoare stabilă bazată pe numele piesei
-            culoare_umplere = culori[hash(p.nume_piesa) % len(culori)]
+            col = culori[hash(p.nume) % len(culori)]
+            self.canvas.create_rectangle(x1, y1, x2, y2, fill=col, outline="#ffffff")
 
-            self.canvas_schita.create_rectangle(
-                px1, py1, px2, py2,
-                fill=culoare_umplere, outline="#ffffff", width=1
-            )
+            # Linii de cant (galbene)
+            orig = p.piesa_originala
+            if orig:
+                lat_L = orig.laturi_cant_l
+                lat_l = orig.laturi_cant_w
 
-            w_box = px2 - px1
-            h_box = py2 - py1
+                lat_oriz = lat_l if p.rotita else lat_L
+                lat_vert = lat_L if p.rotita else lat_l
 
-            # Afișare etichetă dacă piesa este suficient de vizibilă
-            if w_box > 40 and h_box > 22:
-                rot_indicator = " ⟳" if getattr(p, 'rotita', getattr(p, 'rotatia', False)) else ""
-                text_eticheta = f"{p.nume_piesa}{rot_indicator}\n{int(p.lungime)}×{int(p.latime)}"
-                self.canvas_schita.create_text(
-                    (px1 + px2) / 2, (py1 + py2) / 2,
-                    text=text_eticheta, fill="#ffffff",
-                    font=("Segoe UI", 8, "bold"), justify="center"
-                )
-                
-    def _exporta_schita(self):
-        if not self.rezultat_curent or not self.coala_setari:
-            messagebox.showwarning("Atenție", "Trebuie să calculați debitarea înainte de a exporta schița!")
+                if lat_oriz >= 1:
+                    self.canvas.create_line(x1, y1, x2, y1, fill="#f1c40f", width=3)
+                if lat_oriz == 2:
+                    self.canvas.create_line(x1, y2, x2, y2, fill="#f1c40f", width=3)
+
+                if lat_vert >= 1:
+                    self.canvas.create_line(x1, y1, x1, y2, fill="#f1c40f", width=3)
+                if lat_vert == 2:
+                    self.canvas.create_line(x2, y1, x2, y2, fill="#f1c40f", width=3)
+
+            if (x2 - x1) > 35 and (y2 - y1) > 20:
+                txt = f"{p.nume}\n{int(p.lungime)}x{int(p.latime)}"
+                self.canvas.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=txt, fill="white", font=("Segoe UI", 8, "bold"))
+
+    def exporta_schita(self):
+        if not self.rezultat or not self.coala_setari:
+            messagebox.showwarning("Atenție", "Calculează debitarea înainte de export!")
             return
 
-        cale_salvare = filedialog.asksaveasfilename(
-            defaultextension=".png",
-            filetypes=[("Fișiere PNG", "*.png"), ("Toate fișierele", "*.*")],
-            title="Salvează Fișa de Debitare"
-        )
-
-        if not cale_salvare:
+        cale = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("Imagine PNG", "*.png")], title="Salvează schița de debitare")
+        if not cale:
             return
 
         coala = self.coala_setari
-        coala_curenta = self.rezultat_curent.coli[self.coala_activa_idx]
+        coala_curenta = self.rezultat.coli[self.pagina_curenta]
 
-        # Rezoluție înaltă pentru imprimare (2400 x 1600 px)
-        latime_img = 2400
-        inaltime_img = 1600
-        imagine = Image.new("RGB", (latime_img, inaltime_img), color="#1e1e1e")
-        desen = ImageDraw.Draw(imagine)
+        w_img, h_img = 2200, 1500
+        img = Image.new("RGB", (w_img, h_img), color="#1e1e1e")
+        draw = ImageDraw.Draw(img)
 
-        # Calcul scalare
-        margine = 120
-        zona_w = latime_img - 2 * margine
-        zona_h = inaltime_img - 2 * margine - 100  # spațiu pentru antet
-        scara = min(zona_w / coala.lungime, zona_h / coala.latime)
+        scara = min((w_img - 160) / coala.lungime, (h_img - 240) / coala.latime)
+        ox = (w_img - coala.lungime * scara) / 2
+        oy = ((h_img - 100) - coala.latime * scara) / 2 + 100
 
-        orig_x = (latime_img - (coala.lungime * scara)) / 2
-        orig_y = ((inaltime_img - 100) - (coala.latime * scara)) / 2 + 100
+        info = f"AutoCut - Coala {self.pagina_curenta + 1}/{len(self.rezultat.coli)} | Dim: {int(coala.lungime)}x{int(coala.latime)} mm | Deșeu: {coala_curenta.procent_deseu:.1f}%"
+        draw.text((ox, 40), info, fill="white")
 
-        # Antet fișă tehnică
-        antet_text = (
-            f"FISA DE DEBITARE - COALA {self.coala_activa_idx + 1} DIN {len(self.rezultat_curent.coli)} | "
-            f"Dimensiuni: {int(coala.lungime)}x{int(coala.latime)} mm | Tivire: {int(coala.margine_tivire)} mm | "
-            f"Panza: {int(coala.grosime_panza)} mm | Deseu coala: {coala_curenta.procent_deseu:.1f}%"
-        )
-        desen.text((orig_x, 40), antet_text, fill="#ffffff")
+        draw.rectangle([ox, oy, ox + coala.lungime * scara, oy + coala.latime * scara], fill="#d9c3a3", outline="white", width=3)
 
-        # Desenare placă brută
-        desen.rectangle(
-            [orig_x, orig_y, orig_x + (coala.lungime * scara), orig_y + (coala.latime * scara)],
-            fill="#d9c3a3", outline="#ffffff", width=4
-        )
-
-        # Desenare margine tivire
         if coala.margine_tivire > 0:
-            tx = coala.margine_tivire * scara
-            desen.rectangle(
-                [orig_x + tx, orig_y + tx, orig_x + (coala.lungime * scara) - tx, orig_y + (coala.latime * scara) - tx],
-                outline="#8c7b66", width=2
-            )
+            t = coala.margine_tivire * scara
+            draw.rectangle([ox + t, oy + t, ox + coala.lungime * scara - t, oy + coala.latime * scara - t], outline="#8c7b66", width=2)
 
-        # Paletă culori pentru piese
-        culori = ["#2980b9", "#27ae60", "#8e44ad", "#d35400", "#16a085", "#2c3e50"]
+        culori = ["#2980b9", "#27ae60", "#8e44ad", "#d35400", "#16a085"]
 
-        # Desenare piese decupate
         for p in coala_curenta.piese_amplasate:
-            px1 = orig_x + (p.x * scara)
-            py1 = orig_y + (p.y * scara)
-            px2 = px1 + (p.lungime * scara)
-            py2 = py1 + (p.latime * scara)
+            x1 = ox + p.x * scara
+            y1 = oy + p.y * scara
+            x2 = x1 + p.lungime * scara
+            y2 = y1 + p.latime * scara
 
-            culoare = culori[hash(p.nume_piesa) % len(culori)]
-            desen.rectangle([px1, py1, px2, py2], fill=culoare, outline="#ffffff", width=2)
+            col = culori[hash(p.nume) % len(culori)]
+            draw.rectangle([x1, y1, x2, y2], fill=col, outline="white", width=2)
 
-            # Text dimensiuni pe piesă
-            w_box = px2 - px1
-            h_box = py2 - py1
-            if w_box > 60 and h_box > 40:
-                rot_txt = " (R)" if getattr(p, 'rotita', getattr(p, 'rotatia', False)) else ""
-                info_piesa = f"{p.nume_piesa}{rot_txt}\n{int(p.lungime)}x{int(p.latime)} mm"
-                desen.text((px1 + 8, py1 + 8), info_piesa, fill="#ffffff")
+            orig = p.piesa_originala
+            if orig:
+                lat_L = orig.laturi_cant_l
+                lat_l = orig.laturi_cant_w
 
-        imagine.save(cale_salvare, "PNG")
-        messagebox.showinfo("Succes", f"Fișa tehnică a fost salvată cu succes:\n{cale_salvare}")
-                
+                lat_oriz = lat_l if p.rotita else lat_L
+                lat_vert = lat_L if p.rotita else lat_l
+
+                if lat_oriz >= 1:
+                    draw.line([(x1, y1), (x2, y1)], fill="#f1c40f", width=4)
+                if lat_oriz == 2:
+                    draw.line([(x1, y2), (x2, y2)], fill="#f1c40f", width=4)
+                if lat_vert >= 1:
+                    draw.line([(x1, y1), (x1, y2)], fill="#f1c40f", width=4)
+                if lat_vert == 2:
+                    draw.line([(x2, y1), (x2, y2)], fill="#f1c40f", width=4)
+
+            if (x2 - x1) > 50 and (y2 - y1) > 30:
+                txt = f"{p.nume} ({int(p.lungime)}x{int(p.latime)})"
+                draw.text((x1 + 6, y1 + 6), txt, fill="white")
+
+        img.save(cale, "PNG")
+        messagebox.showinfo("Succes", f"Schița a fost exportată cu succes:\n{cale}")

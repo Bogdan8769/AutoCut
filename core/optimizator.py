@@ -1,153 +1,105 @@
-from dataclasses import dataclass, field
-from typing import List, Tuple
-from core.modele import Coala, Piesa, PiesaAmplasata
+from core.modele import PiesaAmplasata
 
 
-@dataclass
-class DreptunghiLiber:
-    x: float
-    y: float
-    lungime: float
-    latime: float
-
-
-@dataclass
 class CoalaCalculata:
-    index: int
-    piese_amplasate: List[PiesaAmplasata] = field(default_factory=list)
-    suprafata_utila: float = 0.0
-    procent_deseu: float = 0.0
+    def __init__(self, index, piese_amplasate, suprafata_utila, procent_deseu):
+        self.index = index
+        self.piese_amplasate = piese_amplasate
+        self.suprafata_utila = suprafata_utila
+        self.procent_deseu = procent_deseu
 
 
-@dataclass
 class RezultatOptimizare:
-    coli: List[CoalaCalculata]
-    piese_neincapute: List[Piesa]
-    suprafata_totala_utila: float
-    suprafata_totala_coli: float
-    procent_mediu_deseu: float
+    def __init__(self, coli, piese_neincapute, suprafata_utila, suprafata_totala, deseu_mediu):
+        self.coli = coli
+        self.piese_neincapute = piese_neincapute
+        self.suprafata_totala_utila = suprafata_utila
+        self.suprafata_totala_coli = suprafata_totala
+        self.procent_mediu_deseu = deseu_mediu
 
 
 class OptimizatorDebitare:
-    def __init__(self, coala: Coala):
+    def __init__(self, coala):
         self.coala = coala
 
-    def optimizeaza(self, lista_piese: List[Piesa]) -> RezultatOptimizare:
-        piese_de_plasat: List[Piesa] = []
+    def optimizeaza(self, lista_piese):
+        piese_individuale = []
         for p in lista_piese:
-            for _ in range(int(p.cantitate)):
-                piese_de_plasat.append(p)
+            for _ in range(p.cantitate):
+                piese_individuale.append(p)
 
-        piese_de_plasat.sort(
-            key=lambda item: (item.lungime * item.latime, max(item.lungime, item.latime)),
-            reverse=True
-        )
+        # Sortare descrescatoare dupa arie (First Fit Decreasing)
+        piese_individuale.sort(key=lambda x: x.lungime * x.latime, reverse=True)
 
-        coli_generate: List[CoalaCalculata] = []
-        piese_ramase = list(piese_de_plasat)
+        coli_generate = []
+        piese_ramase = list(piese_individuale)
         kerf = self.coala.grosime_panza
-        index_coala = 1
+        idx_coala = 1
 
-        while piese_ramase and index_coala <= 100:
-            spatii_libere: List[DreptunghiLiber] = [
-                DreptunghiLiber(
-                    x=self.coala.margine_tivire,
-                    y=self.coala.margine_tivire,
-                    lungime=self.coala.lungime_utila,
-                    latime=self.coala.latime_utila
-                )
-            ]
+        while piese_ramase and idx_coala <= 50:
+            spatii = [{
+                "x": self.coala.margine_tivire,
+                "y": self.coala.margine_tivire,
+                "w": self.coala.lungime_utila,
+                "h": self.coala.latime_utila
+            }]
 
-            piese_pe_aceasta_coala: List[PiesaAmplasata] = []
-            piese_neplasate_tura_asta: List[Piesa] = []
+            piese_coala = []
+            neplasate = []
 
-            for piesa in piese_ramase:
-                potrivire_gasita = False
-                index_spatiu = -1
-                dimensiuni_alese: Tuple[float, float, bool] = (0.0, 0.0, False)
+            for p in piese_ramase:
+                gasit = False
+                for i, sp in enumerate(spatii):
+                    # Incercare orientare normala
+                    if p.lungime <= sp["w"] and p.latime <= sp["h"]:
+                        ales = (p.lungime, p.latime, False)
+                        gasit = True
+                    # Incercare rotire la 90 de grade
+                    elif p.permite_rotatie and p.latime <= sp["w"] and p.lungime <= sp["h"]:
+                        ales = (p.latime, p.lungime, True)
+                        gasit = True
 
-                for idx, spatiu in enumerate(spatii_libere):
-                    if piesa.lungime <= spatiu.lungime and piesa.latime <= spatiu.latime:
-                        dimensiuni_alese = (piesa.lungime, piesa.latime, False)
-                        index_spatiu = idx
-                        potrivire_gasita = True
+                    if gasit:
+                        spatiu = spatii.pop(i)
+                        pL, pl, rot = ales
+
+                        piese_coala.append(PiesaAmplasata(p.nume, spatiu["x"], spatiu["y"], pL, pl, rot))
+
+                        # Taietura ghilotina: despicam spatiul ramas in doua
+                        if spatiu["w"] - pL - kerf > 0:
+                            spatii.append({
+                                "x": spatiu["x"] + pL + kerf,
+                                "y": spatiu["y"],
+                                "w": spatiu["w"] - pL - kerf,
+                                "h": pl
+                            })
+                        if spatiu["h"] - pl - kerf > 0:
+                            spatii.append({
+                                "x": spatiu["x"],
+                                "y": spatiu["y"] + pl + kerf,
+                                "w": spatiu["w"],
+                                "h": spatiu["h"] - pl - kerf
+                            })
+
+                        spatii.sort(key=lambda s: (s["y"], s["x"]))
                         break
 
-                    if piesa.permite_rotatie:
-                        if piesa.latime <= spatiu.lungime and piesa.lungime <= spatiu.latime:
-                            dimensiuni_alese = (piesa.latime, piesa.lungime, True)
-                            index_spatiu = idx
-                            potrivire_gasita = True
-                            break
+                if not gasit:
+                    neplasate.append(p)
 
-                if potrivire_gasita:
-                    spatiu = spatii_libere.pop(index_spatiu)
-                    p_lungime, p_latime, rotita = dimensiuni_alese
-
-                    piese_pe_aceasta_coala.append(
-                        PiesaAmplasata(
-                            nume_piesa=piesa.nume,
-                            x=spatiu.x,
-                            y=spatiu.y,
-                            lungime=p_lungime,
-                            latime=p_latime,
-                            rotita=rotita
-                        )
-                    )
-
-                    spatiu_dreapta = spatiu.lungime - p_lungime - kerf
-                    if spatiu_dreapta > 0:
-                        spatii_libere.append(
-                            DreptunghiLiber(
-                                x=spatiu.x + p_lungime + kerf,
-                                y=spatiu.y,
-                                lungime=spatiu_dreapta,
-                                latime=p_latime
-                            )
-                        )
-
-                    spatiu_jos = spatiu.latime - p_latime - kerf
-                    if spatiu_jos > 0:
-                        spatii_libere.append(
-                            DreptunghiLiber(
-                                x=spatiu.x,
-                                y=spatiu.y + p_latime + kerf,
-                                lungime=spatiu.lungime,
-                                latime=spatiu_jos
-                            )
-                        )
-
-                    spatii_libere.sort(key=lambda s: (s.y, s.x))
-                else:
-                    piese_neplasate_tura_asta.append(piesa)
-
-            if not piese_pe_aceasta_coala:
+            if not piese_coala:
                 break
 
-            suprafata_utila = sum(p.lungime * p.latime for p in piese_pe_aceasta_coala)
-            suprafata_totala = self.coala.lungime * self.coala.latime
-            deseu = max(0.0, ((suprafata_totala - suprafata_utila) / suprafata_totala) * 100)
+            suprafata_utila = sum(p.lungime * p.latime for p in piese_coala)
+            suprafata_coala = self.coala.lungime * self.coala.latime
+            deseu = ((suprafata_coala - suprafata_utila) / suprafata_coala) * 100
 
-            coli_generate.append(
-                CoalaCalculata(
-                    index=index_coala,
-                    piese_amplasate=piese_pe_aceasta_coala,
-                    suprafata_utila=suprafata_utila,
-                    procent_deseu=deseu
-                )
-            )
-
-            piese_ramase = piese_neplasate_tura_asta
-            index_coala += 1
+            coli_generate.append(CoalaCalculata(idx_coala, piese_coala, suprafata_utila, deseu))
+            piese_ramase = neplasate
+            idx_coala += 1
 
         total_util = sum(c.suprafata_utila for c in coli_generate)
-        total_coli_aria = len(coli_generate) * (self.coala.lungime * self.coala.latime)
-        deseu_mediu = max(0.0, ((total_coli_aria - total_util) / total_coli_aria) * 100) if total_coli_aria > 0 else 0.0
+        total_aria = len(coli_generate) * (self.coala.lungime * self.coala.latime)
+        deseu_mediu = ((total_aria - total_util) / total_aria) * 100 if total_aria > 0 else 0
 
-        return RezultatOptimizare(
-            coli=coli_generate,
-            piese_neincapute=piese_ramase,
-            suprafata_totala_utila=total_util,
-            suprafata_totala_coli=total_coli_aria,
-            procent_mediu_deseu=deseu_mediu
-        )
+        return RezultatOptimizare(coli_generate, piese_ramase, total_util, total_aria, deseu_mediu)
